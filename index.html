@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>WikiPhoto — Random Wikipedia Photos</title>
+<style>
+  :root { color-scheme: dark; --bg:#0b0b0d; --panel:rgba(15,15,18,.78); --text:#f5f5f7; --muted:#aaa; }
+  * { box-sizing:border-box }
+  html,body { margin:0; width:100%; height:100%; overflow:hidden; background:var(--bg); color:var(--text);
+    font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+  #app { width:100%; height:100%; position:relative; display:flex; align-items:center; justify-content:center; }
+  #photo { max-width:100%; max-height:100%; width:auto; height:auto; object-fit:contain; opacity:0; transition:opacity .35s ease; }
+  #photo.show { opacity:1 }
+  .shade { position:absolute; inset:0; pointer-events:none;
+    background:linear-gradient(to bottom,rgba(0,0,0,.42),transparent 24%,transparent 70%,rgba(0,0,0,.72)); }
+  header { position:absolute; top:0; left:0; right:0; z-index:3; padding:18px 22px; display:flex; justify-content:space-between; align-items:center; }
+  .brand { font-weight:750; letter-spacing:-.02em; }
+  .brand span { color:#aaa; font-weight:500; }
+  button { border:1px solid rgba(255,255,255,.18); background:rgba(20,20,24,.72); color:white;
+    border-radius:999px; padding:10px 15px; cursor:pointer; backdrop-filter:blur(12px); font-size:14px; }
+  button:hover { background:rgba(45,45,52,.85) }
+  #info { position:absolute; z-index:3; left:22px; right:22px; bottom:22px; max-width:760px; }
+  #title { font-size:clamp(22px,3vw,42px); font-weight:760; line-height:1.05; margin:0 0 8px; letter-spacing:-.03em; text-shadow:0 2px 18px #000; }
+  #caption { color:#ddd; line-height:1.45; font-size:14px; max-width:680px; text-shadow:0 1px 10px #000; }
+  #meta { color:#aaa; font-size:12px; margin-top:8px; }
+  #source { margin-top:12px; display:inline-block; text-decoration:none; color:white; font-size:13px; border-bottom:1px solid #777; }
+  #next { position:absolute; z-index:4; right:22px; bottom:22px; padding:13px 20px; font-weight:700; }
+  #status { position:absolute; z-index:5; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,.45); backdrop-filter:blur(5px); }
+  #status.hidden { display:none }
+  .loader { width:34px; height:34px; border:3px solid #666; border-top-color:#fff; border-radius:50%; animation:spin .8s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg) } }
+  #error { max-width:520px; text-align:center; padding:30px; }
+  #error p { color:#bbb; line-height:1.5 }
+  @media(max-width:650px){ header{padding:14px} #info{left:14px;right:14px;bottom:78px} #next{left:14px;right:14px;bottom:14px} }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="brand">WikiPhoto <span>/ random Wikipedia photography</span></div>
+    <button id="hideInfo">Hide info</button>
+  </header>
+
+  <img id="photo" alt="">
+  <div class="shade"></div>
+
+  <section id="info">
+    <h1 id="title"></h1>
+    <div id="caption"></div>
+    <div id="meta"></div>
+    <a id="source" target="_blank" rel="noopener">View Wikipedia article ↗</a>
+  </section>
+
+  <button id="next">Next photo →</button>
+
+  <div id="status">
+    <div id="loading"><div class="loader"></div></div>
+    <div id="error" hidden>
+      <strong>Couldn't find a suitable image.</strong>
+      <p>The app will try another random Wikipedia article.</p>
+      <button id="retry">Try again</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = "https://en.wikipedia.org/w/api.php";
+const badWords = /\b(map|maps|logo|logos|flag|flags|diagram|chart|graph|coat of arms|seal|icon|symbol|location map|locator|route map|timeline|infobox|collage|screenshot|poster|cover|album cover|book cover|painting|drawing|illustration|sculpture|statue|plan|blueprint)\b/i;
+let infoVisible = true;
+let loading = false;
+
+const $ = id => document.getElementById(id);
+const img = $("photo");
+
+function setLoading(on) {
+  $("status").classList.toggle("hidden", !on);
+  $("loading").hidden = !on;
+  $("error").hidden = true;
+}
+
+function showError() {
+  $("status").classList.remove("hidden");
+  $("loading").hidden = true;
+  $("error").hidden = false;
+}
+
+function cleanText(s="") {
+  return s.replace(/<[^>]*>/g,"").replace(/\s+/g," ").trim();
+}
+
+async function getRandomArticle() {
+  const u = new URL(API);
+  u.searchParams.set("action","query");
+  u.searchParams.set("generator","random");
+  u.searchParams.set("grnnamespace","0");
+  u.searchParams.set("grnlimit","1");
+  u.searchParams.set("prop","pageimages|info");
+  u.searchParams.set("piprop","original|name");
+  u.searchParams.set("inprop","url");
+  u.searchParams.set("format","json");
+  u.searchParams.set("origin","*");
+
+  const r = await fetch(u);
+  if (!r.ok) throw new Error("API request failed");
+  const d = await r.json();
+  const page = Object.values(d.query?.pages || {})[0];
+  return page;
+}
+
+async function loadPhoto(attempt=0) {
+  if (loading) return;
+  loading = true;
+  setLoading(true);
+  img.classList.remove("show");
+
+  try {
+    // Try several random articles because many have no lead image.
+    for (let i=0; i<18; i++) {
+      const page = await getRandomArticle();
+      const original = page?.original;
+      const name = page?.original?.source || "";
+      const desc = cleanText(page?.description || "");
+
+      if (!original?.source) continue;
+      if (!/^image\//i.test(original.mediatype || "image/jpeg") && !/\.(jpe?g|png|webp)$/i.test(original.source)) continue;
+      if (badWords.test(name) || badWords.test(desc) || badWords.test(page.title || "")) continue;
+
+      const probe = new Image();
+      probe.onload = () => {
+        img.src = original.source;
+        img.alt = page.title || "Random Wikipedia photograph";
+        $("title").textContent = page.title || "";
+        $("caption").textContent = desc || "Randomly selected from Wikipedia.";
+        $("meta").textContent = "Wikipedia • " + (original.width && original.height ? `${original.width} × ${original.height}` : "");
+        $("source").href = page.fullurl || `https://en.wikipedia.org/wiki/${encodeURIComponent(page.title)}`;
+        img.classList.add("show");
+        setLoading(false);
+        loading = false;
+      };
+      probe.onerror = () => { loading = false; loadPhoto(); };
+      probe.src = original.source;
+      return;
+    }
+    showError();
+    loading = false;
+  } catch (e) {
+    console.error(e);
+    showError();
+    loading = false;
+  }
+}
+
+$("next").onclick = () => loadPhoto();
+$("retry").onclick = () => loadPhoto();
+
+$("hideInfo").onclick = () => {
+  infoVisible = !infoVisible;
+  $("info").style.display = infoVisible ? "" : "none";
+  $("hideInfo").textContent = infoVisible ? "Hide info" : "Show info";
+};
+
+document.addEventListener("keydown", e => {
+  if (e.code === "Space" || e.code === "ArrowRight") {
+    e.preventDefault();
+    loadPhoto();
+  }
+  if (e.code === "i") $("hideInfo").click();
+});
+
+// Swipe left/right on mobile
+let sx = 0;
+document.addEventListener("touchstart", e => sx = e.changedTouches[0].screenX, {passive:true});
+document.addEventListener("touchend", e => {
+  const dx = e.changedTouches[0].screenX - sx;
+  if (Math.abs(dx) > 60) loadPhoto();
+}, {passive:true});
+
+loadPhoto();
+</script>
+</body>
+</html>
