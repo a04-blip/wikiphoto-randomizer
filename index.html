@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>WikiPhoto — Random Photography</title>
+<style>
+:root{color-scheme:dark;--bg:#09090b;--panel:rgba(14,14,17,.78);--line:rgba(255,255,255,.15);--muted:#aaa}
+*{box-sizing:border-box}html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:#fff;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+#app{height:100%;position:relative;display:flex;align-items:center;justify-content:center}
+#photo{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;opacity:0;transition:opacity .3s}
+#photo.show{opacity:1}.shade{position:absolute;inset:0;pointer-events:none;background:linear-gradient(#0009,transparent 22%,transparent 65%,#000d)}
+header{position:absolute;top:0;left:0;right:0;z-index:4;padding:18px 22px;display:flex;justify-content:space-between;align-items:center}
+.brand{font-weight:800;letter-spacing:-.03em}.brand span{font-weight:450;color:#999}
+.controls{display:flex;gap:8px}.btn{border:1px solid var(--line);background:var(--panel);color:#fff;border-radius:999px;padding:10px 15px;cursor:pointer;backdrop-filter:blur(14px)}
+#info{position:absolute;z-index:3;left:22px;bottom:24px;max-width:720px}.kicker{font-size:11px;text-transform:uppercase;letter-spacing:.13em;color:#aaa;margin-bottom:7px}
+#title{font-size:clamp(23px,3vw,43px);line-height:1.03;margin:0 0 8px;letter-spacing:-.035em;text-shadow:0 2px 18px #000}
+#caption{font-size:14px;color:#ddd;line-height:1.45;text-shadow:0 1px 10px #000}#meta{font-size:12px;color:#aaa;margin-top:8px}
+a#source{display:inline-block;margin-top:10px;color:#fff;font-size:13px;text-decoration:none;border-bottom:1px solid #777}
+#next{position:absolute;right:22px;bottom:22px;z-index:4;font-weight:750;padding:13px 20px}
+#settings{position:absolute;z-index:10;right:18px;top:64px;width:330px;max-height:calc(100vh - 85px);overflow:auto;background:rgba(16,16,19,.94);border:1px solid var(--line);border-radius:18px;padding:18px;backdrop-filter:blur(20px);box-shadow:0 20px 60px #0009}
+#settings.hidden{display:none}.section{margin-bottom:19px}.section:last-child{margin-bottom:4px}
+label.head{display:block;font-size:12px;color:#aaa;text-transform:uppercase;letter-spacing:.1em;margin-bottom:9px}
+.options{display:flex;flex-wrap:wrap;gap:7px}.chip{border:1px solid var(--line);background:#151518;color:#ddd;border-radius:999px;padding:8px 11px;font-size:13px;cursor:pointer}
+.chip.active{background:#eee;color:#111;border-color:#eee}
+select{width:100%;background:#151518;color:#fff;border:1px solid var(--line);border-radius:10px;padding:10px}
+.note{font-size:12px;color:#888;line-height:1.45;margin-top:7px}
+#status{position:absolute;z-index:8;inset:0;display:flex;align-items:center;justify-content:center;background:#0007;backdrop-filter:blur(5px)}
+#status.hidden{display:none}.loader{width:34px;height:34px;border:3px solid #666;border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
+#error{text-align:center;max-width:450px;padding:30px}.errortext{color:#aaa;line-height:1.5}
+@media(max-width:650px){header{padding:13px}.brand span{display:none}#info{left:14px;right:14px;bottom:77px}#next{left:14px;right:14px;bottom:13px}#settings{left:12px;right:12px;width:auto;top:60px}}
+</style>
+</head>
+<body>
+<div id="app">
+<header>
+  <div class="brand">WikiPhoto <span>/ random photography</span></div>
+  <div class="controls"><button class="btn" id="filters">Filters</button><button class="btn" id="infoBtn">Hide info</button></div>
+</header>
+
+<img id="photo" alt="">
+<div class="shade"></div>
+
+<div id="settings" class="hidden">
+  <div class="section"><label class="head">Era</label>
+    <div class="options" data-group="era">
+      <button class="chip active" data-value="any">Any era</button>
+      <button class="chip" data-value="before1900">Before 1900</button>
+      <button class="chip" data-value="1900s">1900–1949</button>
+      <button class="chip" data-value="1950s">1950–1979</button>
+      <button class="chip" data-value="1980s">1980–1999</button>
+      <button class="chip" data-value="2000s">2000–present</button>
+    </div>
+  </div>
+  <div class="section"><label class="head">Vibe</label>
+    <div class="options" data-group="vibe">
+      <button class="chip active" data-value="any">Anything</button>
+      <button class="chip" data-value="historical">Historical</button>
+      <button class="chip" data-value="everyday">Everyday life</button>
+      <button class="chip" data-value="people">People & portraits</button>
+      <button class="chip" data-value="places">Places & streets</button>
+      <button class="chip" data-value="fashion">Fashion & style</button>
+      <button class="chip" data-value="architecture">Architecture</button>
+      <button class="chip" data-value="weird">Weird & obscure</button>
+    </div>
+  </div>
+  <div class="section"><label class="head">Photo type</label>
+    <select id="type">
+      <option value="photo">Photography only</option>
+      <option value="any">Allow illustrations</option>
+    </select>
+  </div>
+  <div class="section"><label class="head">Discovery</label>
+    <select id="discovery">
+      <option value="obscure">More obscure / surprising</option>
+      <option value="balanced">Balanced</option>
+      <option value="popular">More recognizable subjects</option>
+    </select>
+    <div class="note">The app samples random Wikipedia articles, then rejects images that don't fit your filters. Some filters are necessarily approximate because Wikipedia doesn't consistently label every photograph.</div>
+  </div>
+  <button class="btn" id="apply" style="width:100%;margin-top:4px">Apply & show a photo</button>
+</div>
+
+<section id="info">
+  <div class="kicker" id="kicker">Wikipedia photograph</div>
+  <h1 id="title"></h1><div id="caption"></div><div id="meta"></div>
+  <a id="source" target="_blank" rel="noopener">View article ↗</a>
+</section>
+<button class="btn" id="next">Next photo →</button>
+
+<div id="status" class="hidden"><div id="loading"><div class="loader"></div></div>
+  <div id="error" hidden><strong>Couldn't find a matching photo.</strong><p class="errortext">Try loosening a filter, or try again.</p><button class="btn" id="retry">Try again</button></div>
+</div>
+</div>
+
+<script>
+const API="https://en.wikipedia.org/w/api.php";
+const state={era:"any",vibe:"any",type:"photo",discovery:"obscure"};
+const bad=/\b(map|maps|logo|logos|flag|flags|diagram|chart|graph|coat of arms|seal|icon|symbol|location map|locator|route map|timeline|infobox|collage|screenshot|poster|cover|album cover|book cover|painting|drawing|illustration|sculpture|statue|plan|blueprint|computer generated|render)\b/i;
+const eraWords={
+ before1900:/\b(18[0-9]{2}|17[0-9]{2}|16[0-9]{2}|15[0-9]{2})\b/,
+ "1900s":/\b(19[0-4][0-9])\b/,
+ "1950s":/\b(19[5-7][0-9])\b/,
+ "1980s":/\b(19[89][0-9])\b/,
+ "2000s":/\b(20[0-9]{2}|202[0-9])\b/
+};
+const vibeWords={
+ historical:/\b(history|historical|war|battle|revolution|empire|soldier|military|protest|strike|ceremony|vintage|historic|old)\b/i,
+ everyday:/\b(street|market|shop|store|home|family|worker|workers|daily|life|people|crowd|school|child|children|transport|train|bus)\b/i,
+ people:/\b(portrait|person|people|actor|actress|politician|artist|musician|writer|author|man|woman|child|family)\b/i,
+ places:/\b(city|street|town|village|building|landscape|park|square|road|bridge|station|harbor|harbour|neighborhood|neighbourhood)\b/i,
+ fashion:/\b(fashion|clothing|dress|costume|model|designer|style|runway|outfit)\b/i,
+ architecture:/\b(architecture|architect|building|house|church|cathedral|castle|palace|skyscraper|structure)\b/i,
+ weird:/\b(unknown|unidentified|mystery|unusual|strange|odd|rare|obscure|incident|accident|disaster|curious)\b/i
+};
+
+function setStatus(on,error=false){
+ document.getElementById("status").classList.toggle("hidden",!on);
+ document.getElementById("loading").hidden=!on||error;
+ document.getElementById("error").hidden=!error;
+}
+async function randomPage(){
+ const u=new URL(API);
+ u.searchParams.set("action","query");u.searchParams.set("generator","random");u.searchParams.set("grnnamespace","0");u.searchParams.set("grnlimit","1");
+ u.searchParams.set("prop","pageimages|info|categories");u.searchParams.set("piprop","original|name");u.searchParams.set("inprop","url");
+ u.searchParams.set("cllimit","max");u.searchParams.set("clshow","!hidden");u.searchParams.set("format","json");u.searchParams.set("origin","*");
+ const r=await fetch(u);if(!r.ok)throw Error();const d=await r.json();return Object.values(d.query?.pages||{})[0];
+}
+function text(p){
+ return [p?.title,p?.description,...(p?.categories||[]).map(x=>x.title)].join(" ");
+}
+function eraMatch(t){
+ if(state.era==="any")return true;
+ if(state.era==="before1900")return eraWords.before1900.test(t);
+ if(eraWords[state.era]?.test(t))return true;
+ // Also accept decade hints in article text/title when present.
+ const years=t.match(/\b(1[89][0-9]{2}|20[0-9]{2})\b/g)||[];
+ return years.some(y=>{
+   const n=+y;
+   if(state.era==="1900s")return n>=1900&&n<=1949;
+   if(state.era==="1950s")return n>=1950&&n<=1979;
+   if(state.era==="1980s")return n>=1980&&n<=1999;
+   if(state.era==="2000s")return n>=2000;
+   return false;
+ });
+}
+function vibeMatch(t){
+ if(state.vibe==="any")return true;
+ return vibeWords[state.vibe].test(t);
+}
+async function load(){
+ setStatus(true);document.getElementById("photo").classList.remove("show");
+ for(let i=0;i<45;i++){
+   try{
+    const p=await randomPage(); if(!p?.original?.source)continue;
+    const t=text(p);
+    if(state.type==="photo"&&bad.test(t))continue;
+    if(!eraMatch(t))continue;
+    if(!vibeMatch(t))continue;
+    if(state.discovery==="obscure" && (p.title||"").length<3)continue;
+
+    const src=p.original.source;
+    await new Promise((resolve,reject)=>{
+      const probe=new Image();probe.onload=resolve;probe.onerror=reject;probe.src=src;
+    });
+    const img=document.getElementById("photo");
+    img.src=src;img.alt=p.title||"Wikipedia photograph";
+    document.getElementById("title").textContent=p.title||"Untitled";
+    document.getElementById("caption").textContent=(p.description||"Randomly discovered through Wikipedia.");
+    document.getElementById("meta").textContent=`${state.era==="any"?"Any era":state.era} · ${state.vibe==="any"?"All subjects":state.vibe} · ${p.original.width||"?"} × ${p.original.height||"?"}`;
+    document.getElementById("source").href=p.fullurl||`https://en.wikipedia.org/wiki/${encodeURIComponent(p.title)}`;
+    document.getElementById("photo").classList.add("show");setStatus(false);return;
+   }catch(e){}
+ }
+ setStatus(true,true);
+}
+document.querySelectorAll(".options").forEach(group=>{
+ group.addEventListener("click",e=>{
+  if(!e.target.classList.contains("chip"))return;
+  group.querySelectorAll(".chip").forEach(x=>x.classList.remove("active"));e.target.classList.add("active");
+  state[group.dataset.group]=e.target.dataset.value;
+ });
+});
+document.getElementById("type").onchange=e=>state.type=e.target.value;
+document.getElementById("discovery").onchange=e=>state.discovery=e.target.value;
+document.getElementById("filters").onclick=()=>document.getElementById("settings").classList.toggle("hidden");
+document.getElementById("apply").onclick=()=>{document.getElementById("settings").classList.add("hidden");load()};
+document.getElementById("next").onclick=load;document.getElementById("retry").onclick=load;
+let visible=true;document.getElementById("infoBtn").onclick=()=>{
+ visible=!visible;document.getElementById("info").style.display=visible?"":"none";
+ document.getElementById("infoBtn").textContent=visible?"Hide info":"Show info";
+};
+document.addEventListener("keydown",e=>{if(e.code==="Space"||e.code==="ArrowRight"){e.preventDefault();load()}if(e.key.toLowerCase()==="f")document.getElementById("filters").click();if(e.key.toLowerCase()==="i")document.getElementById("infoBtn").click()});
+let sx=0;document.addEventListener("touchstart",e=>sx=e.changedTouches[0].screenX,{passive:true});
+document.addEventListener("touchend",e=>{if(Math.abs(e.changedTouches[0].screenX-sx)>60)load()},{passive:true});
+load();
+</script>
+</body>
+</html>
